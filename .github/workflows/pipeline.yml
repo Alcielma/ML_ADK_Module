@@ -1,0 +1,34 @@
+name: Deploy to Cloud Run without Dockerfile
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: graphite-byte-472516-n8
+  SERVICE_NAME: ml-dados
+  REGION: us-central1
+
+jobs:
+  deploy_from_source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Authenticate to GCP
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: Set up Cloud SDK
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          
+      - name: Deploy to Cloud Run from source
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --source=.
