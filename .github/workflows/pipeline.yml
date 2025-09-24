@@ -1,4 +1,4 @@
-name: Deploy to Cloud Run
+name: Deploy and Run ML Script on Cloud Run Job
 
 on:
   push:
@@ -7,7 +7,8 @@ on:
 
 env:
   PROJECT_ID: graphite-byte-472516-n8
-  SERVICE_NAME: ml-dados
+  IMAGE_NAME: ml-dados
+  JOB_NAME: ml-dados-job
   REGION: us-central1
 
 jobs:
@@ -27,9 +28,24 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - name: Deploy to Cloud Run
+      - name: Build Docker image
         run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --region=${{ env.REGION }} \
-            --source=. \
-            --allow-unauthenticated
+          gcloud builds submit --tag gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }} .
+
+      - name: Create or Update Cloud Run Job
+        run: |
+          if gcloud run jobs describe ${{ env.JOB_NAME }} --region ${{ env.REGION }}; then
+            echo "Job exists, updating..."
+            gcloud run jobs update ${{ env.JOB_NAME }} \
+              --image gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }} \
+              --region ${{ env.REGION }}
+          else
+            echo "Creating new job..."
+            gcloud run jobs create ${{ env.JOB_NAME }} \
+              --image gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }} \
+              --region ${{ env.REGION }}
+          fi
+
+      - name: Execute Cloud Run Job
+        run: |
+          gcloud run jobs execute ${{ env.JOB_NAME }} --region ${{ env.REGION }}
