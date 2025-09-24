@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 env:
   PROJECT_ID: graphite-byte-472516-n8
@@ -16,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
@@ -27,25 +28,36 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
+          install_components: "gke-gcloud-auth-plugin"
+
+      - name: Set Docker image version
+        id: set-version
+        run: echo "version=$(date +%Y.%m.%d.%H%M)" >> $GITHUB_OUTPUT
 
       - name: Build Docker image
         run: |
-          gcloud builds submit --tag gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }} .
+          gcloud builds submit \
+            --tag gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ steps.set-version.outputs.version }} .
 
       - name: Create or Update Cloud Run Job
         run: |
           if gcloud run jobs describe ${{ env.JOB_NAME }} --region ${{ env.REGION }}; then
             echo "Job exists, updating..."
             gcloud run jobs update ${{ env.JOB_NAME }} \
-              --image gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }} \
-              --region ${{ env.REGION }}
+              --image gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ steps.set-version.outputs.version }} \
+              --region ${{ env.REGION }} \
+              --memory 1Gi \
+              --cpu 1
           else
             echo "Creating new job..."
             gcloud run jobs create ${{ env.JOB_NAME }} \
-              --image gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }} \
-              --region ${{ env.REGION }}
+              --image gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ steps.set-version.outputs.version }} \
+              --region ${{ env.REGION }} \
+              --memory 1Gi \
+              --cpu 1
           fi
 
       - name: Execute Cloud Run Job
         run: |
-          gcloud run jobs execute ${{ env.JOB_NAME }} --region ${{ env.REGION }}
+          gcloud run jobs execute ${{ env.JOB_NAME }} \
+            --region ${{ env.REGION }}
